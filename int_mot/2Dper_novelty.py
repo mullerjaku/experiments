@@ -121,7 +121,7 @@ def main():
     object.header = object_pose.header
     object.primitives.append(object_shape)
     object.primitive_poses.append(object_pose.pose)
-    object_pose_array = np.array([object_pose.pose.position.x, object_pose.pose.position.y, 1.12]) #1.02 is because for a moment we are checking and moving in X and Y axis 
+    object_pose_array = np.array([object_pose.pose.position.x, object_pose.pose.position.y, 1.12])
     
     # Add object in scene
     scene.add_object(object)
