@@ -49,20 +49,6 @@ def inverse(database, sensory_goal):
                 neighbors.pop()
     return [neighbor[1] for neighbor in neighbors] 
 
-def update_interest_model(goal, near_neigh, t):
-    s_prev = np.array([goal[0], goal[1]])
-    interest = goal[2]
-    s = np.array([near_neigh[3], near_neigh[4]])
-    interest_sg = np.linalg.norm(s - s_prev)
-    #interest_sg = (abs(s-s_prev)) #/1 #1 is the maximum possible distance
-
-    n = 100
-    # Update interest model
-    #interest_new = ((n-1)/n) * interest + (1 / n) * interest_sg
-    interest_new = ((n-70)/n) * interest_sg + ((n - 20) / n) * interest
-
-    return interest_new
-
 def main():
     rospy.init_node("robot", anonymous=True)
     moveit_commander.roscpp_initialize(sys.argv)
