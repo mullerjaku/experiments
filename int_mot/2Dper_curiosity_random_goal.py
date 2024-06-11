@@ -28,6 +28,7 @@ from plyer import notification
 AREA_MAX_DISTANCE = 1.2
 
 def normalize(d):
+    # Normalizes the distance based on the maximum reachable distance of the robot
     d_norm = d / AREA_MAX_DISTANCE #max=(2 x 0.85 max reach of robot) min max norm
     return d_norm
 
@@ -113,7 +114,7 @@ def main():
     p = 9
     while not rospy.is_shutdown():
         pose_start = geometry_msgs.msg.Pose()
-        #Pose start
+        #Pose start of robot
         pose_start.position.x = 0.4
         pose_start.position.y = -0.8    
         pose_start.position.z = 1.35
@@ -174,7 +175,7 @@ def main():
                 pose_plan.position.x += vel_x
                 pose_plan.position.y += vel_y
                 while True:
-                    vel_z = random.uniform(-0.5, 0.5)  # Náhodný pohyb
+                    vel_z = random.uniform(-0.5, 0.5)  # Radnom move in z between -0.5 and 0.5
                     position_z = pose_plan.position.z + vel_z
 
                     if (1.0 < position_z < 1.4):
@@ -187,6 +188,7 @@ def main():
                 pose_plan.orientation.z = quaternion_v2[2]
                 pose_plan.orientation.w = quaternion_v2[3]
 
+                #Perception of the future point
                 future_point_pose = np.array([pose_plan.position.x, pose_plan.position.y, pose_plan.position.z])
                 theta = np.radians(alpha)
                 future_point_rotation = np.array([[np.cos(theta), -np.sin(theta), 0], [np.sin(theta), np.cos(theta), 0], [0, 0, 1]])
@@ -212,17 +214,17 @@ def main():
                 print("Empty list")
                 continue
 
-            #Creating goal
+            #Creating random goal
             obj_grip_per_goal = random.choice([0, 1])
             d_per_goal = random.uniform(0, 1)
             random_goal = np.array([d_per_goal, obj_grip_per_goal])
             print("Random goal: ",+random_goal)
-            near_neigh = inverse(point_move_list, random_goal)
+            near_neigh = inverse(point_move_list, random_goal) #Finding the nearest neighbors to the goal in perception space
 
             # for print_pole in near_neigh:
             #     print(print_pole)
 
-            for pole in near_neigh:
+            for pole in near_neigh: #Try to execute the nearest neighbor
                 [x, y, z, dis_sel, obj_grip_sel]=pole
 
                 #Pose move
@@ -253,7 +255,7 @@ def main():
                     #print("Executing with curios interest value: ",+max_interest_value)
                     arm_group.go(pose_go, wait=True)
 
-                    #Add point
+                    #Add point where robot moved
                     move_pose = arm_group.get_current_pose("ee_link").pose.position
                     move_point_pose = np.array([move_pose.x, move_pose.y, move_pose.z])
 
@@ -275,6 +277,7 @@ def main():
                     arm_group.clear_pose_targets()
                     break
 
+        #Plotting the graph
         plt.figure(figsize=(14, 8))
         for loop_count_val, d_val, obj_val in zip(loop_count, d_obj, obj):
             if obj_val == 0:
