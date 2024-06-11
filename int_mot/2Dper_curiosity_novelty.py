@@ -28,14 +28,16 @@ from plyer import notification
 AREA_MAX_DISTANCE = 1.2
 
 def normalize(d):
+    # Normalizes the distance based on the maximum reachable distance of the robot
     d_norm = d / AREA_MAX_DISTANCE #max=(2 x 0.85 max reach of robot) min max norm
     return d_norm
 
 def inverse(database, sensory_goal):
+    # Finds the nearest motor parameters to the sensory goal in the database
     min_distance = float('inf')
     nearest_motor_params = None
 
-    for entry in database:
+    for entry in database: #entry = [x, y, z, d, obj_grip]
         perception = np.array([entry[3], entry[4]])
         distance = np.linalg.norm(sensory_goal - perception)
         if distance < min_distance:
@@ -47,7 +49,7 @@ def inverse(database, sensory_goal):
 
 def novelty(random_goal, points_poses_list):
     novelty_list = [] #List and loop for collect the distances
-    for one_point in points_poses_list:
+    for one_point in points_poses_list: #one_point = [x, y, z, d, obj_grip]
         d_novelty_points = np.linalg.norm(one_point - random_goal) #Calculate distance with every point in the points_list_poses
         d_index = d_novelty_points #**2
         novelty_list.append(d_index) #List of distances between expected point and whole the points from past
@@ -117,7 +119,7 @@ def main():
     loop_times = []
     while not rospy.is_shutdown():
         pose_start = geometry_msgs.msg.Pose()
-        #Pose start
+        #Pose start of robot
         pose_start.position.x = -0.4
         pose_start.position.y = 0.3    
         pose_start.position.z = 1.1
@@ -173,7 +175,7 @@ def main():
                 pose_plan.position.x += vel_x
                 pose_plan.position.y += vel_y
                 while True:
-                    vel_z = random.uniform(-0.5, 0.5)
+                    vel_z = random.uniform(-0.5, 0.5) # Radnom move in z between -0.5 and 0.5
                     position_z = pose_plan.position.z + vel_z
 
                     if (1.0 < position_z < 1.4):
@@ -186,6 +188,7 @@ def main():
                 pose_plan.orientation.z = quaternion_v2[2]
                 pose_plan.orientation.w = quaternion_v2[3]
 
+                #Perception of the future point
                 future_point_pose = np.array([pose_plan.position.x, pose_plan.position.y, pose_plan.position.z])
                 theta = np.radians(alpha)
                 future_point_rotation = np.array([[np.cos(theta), -np.sin(theta), 0], [np.sin(theta), np.cos(theta), 0], [0, 0, 1]])
@@ -221,13 +224,15 @@ def main():
                 random_goal = np.array([d_per_goal, obj_grip_per_goal])
                 #print("Random goal: ",+random_goal)
                 pred_novelty = novelty(random_goal, point_goal_list) #return novelty of random goal
-                near_neigh = inverse(point_move_list, random_goal) #return x, y, z, d, obj_grip
+                near_neigh = inverse(point_move_list, random_goal) #return x, y, z, d, obj_grip of the nearest point to the random goal in perception
 
+                #Checking if the goal is already in the list
+                #To dont have the same goals bc maybe the robot wont be able to execute it
                 near_neigh_tuple = (near_neigh[0], near_neigh[1], near_neigh[2])
                 if not any((goal[0], goal[1], goal[2]) == near_neigh_tuple for goal in random_goals):
                     random_goals.append((near_neigh[0], near_neigh[1], near_neigh[2], pred_novelty, d_per_goal, obj_grip_per_goal))
 
-            print(q)
+            print(q) #Number of loops for creating goals
             serazene_pole = sorted(random_goals, key=lambda x: x[3], reverse=True)
             vybrane_pole = serazene_pole[:10]
             goal_pole_dis = []
@@ -238,9 +243,9 @@ def main():
                 [x, y, z, nov_sel, dis_sel, obj_grip_sel]=print_pole
                 goal_pole_dis.append(dis_sel)
                 goal_pole_obj.append(obj_grip_sel)
-            #     goal_pole_inter.append(max_interest_value)
+            #   goal_pole_inter.append(max_interest_value)
 
-            for pole in vybrane_pole:
+            for pole in vybrane_pole: #Try to execute the point closest to the goal with the highest novelty
                 [x, y, z, nov, d_sel, obj_sel]=pole
 
                 #Pose move
@@ -266,10 +271,10 @@ def main():
 
                 else:
                     print(pole)
-                    print("Executing with curios interest value: ",+nov)
+                    print("Executing with curios novelty value: ",+nov)
                     arm_group.go(pose_go, wait=True)
 
-                    #Add point
+                    #Add point where the robot moved
                     move_pose = arm_group.get_current_pose("ee_link").pose.position
                     move_point_pose = np.array([move_pose.x, move_pose.y, move_pose.z]) #move_pose.z
 
@@ -280,7 +285,8 @@ def main():
                     if norm_d < 0.025:
                         # Checking the correct position
                         obj_grip = 1
-
+                    
+                    #Add the point in the list and delete the first one if the list is longer than 40
                     reach_goal_point = np.array([norm_d, obj_grip])
                     point_goal_list = np.append(point_goal_list, [reach_goal_point], axis=0) #Add the expected point in the list, not just points of this looop
                     if point_goal_list.shape[0] > 40:
@@ -294,10 +300,12 @@ def main():
 
                     arm_group.clear_pose_targets()
                     break
+        #End the time
         end_time = rospy.Time.now().to_sec()
         loop_duration = end_time - start_time
         loop_times.append(loop_duration)
 
+        #Plotting the graph
         alphas = np.linspace(1.0, 0.0, num=10)
         plt.figure(figsize=(14, 8))
         for loop_count_val, d_val, obj_val in zip(loop_count, d_obj, obj):
