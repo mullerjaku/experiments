@@ -27,14 +27,15 @@ from plyer import notification
 AREA_MAX_DISTANCE = 1.2
 
 def normalize(d):
+    # Normalizes the distance based on the maximum reachable distance of the robot
     d_norm = d / AREA_MAX_DISTANCE #max=(2 x 0.85 max reach of robot) min max norm
     return d_norm
 
-def inverse(database, sensory_goal):
+def inverse(database, sensory_goal): #Nearest neighbour
     min_distance = float('inf')
     nearest_motor_params = None
 
-    for entry in database:
+    for entry in database: #Database of points for future movement
         perception = np.array([entry[3], entry[4]])
         distance = np.linalg.norm(sensory_goal - perception)
         if distance < min_distance:
@@ -44,15 +45,15 @@ def inverse(database, sensory_goal):
 
     return nearest_motor_params
 
-def update_interest_model(goal, near_neigh, t):
-    s_prev = np.array([goal[0], goal[1]])
-    interest = goal[2]
+def update_interest_model(goal, near_neigh, t): #Criteria of interest
+    s_prev = np.array([goal[0], goal[1]]) #Previous goal
+    interest = goal[2] #Previous interest
     s = np.array([near_neigh[3], near_neigh[4]])
     interest_sg = np.linalg.norm(s - s_prev)
     n = 100
     # Update interest model
     #interest_new = ((n-1)/n) * interest + (1 / n) * interest_sg
-    interest_new = ((n-70)/n) * interest_sg + ((n - 20) / n) * interest
+    interest_new = ((n-70)/n) * interest_sg + ((n - 20) / n) * interest #Criteria calculation
 
     return interest_new
 
@@ -119,7 +120,7 @@ def main():
     p = 0
     while not rospy.is_shutdown():
         pose_start = geometry_msgs.msg.Pose()
-        #Pose start
+        #Pose start of robot
         pose_start.position.x = 0.4
         pose_start.position.y = -0.8    
         pose_start.position.z = 1.35
@@ -146,10 +147,12 @@ def main():
         goals_list_d = []
         goals_list_o = []
         goals_list_i = []
+
         #First point to count the distance of poses 
         first_point = arm_group.get_current_pose("ee_link").pose.position
         rospy.sleep(1)
         first_point_pose = np.array([first_point.x, first_point.y, first_point.z])
+
         #Start distance
         start_dis = np.linalg.norm(first_point_pose - object_pose_array)
         start_dis_norm = normalize(start_dis)
@@ -180,7 +183,7 @@ def main():
                 pose_plan.position.x += vel_x
                 pose_plan.position.y += vel_y
                 while True:
-                    vel_z = random.uniform(-0.5, 0.5)  # Random move
+                    vel_z = random.uniform(-0.5, 0.5)  # Radnom move in z between -0.5 and 0.5
                     position_z = pose_plan.position.z + vel_z
 
                     if (1.0 < position_z < 1.4):
@@ -193,14 +196,14 @@ def main():
                 pose_plan.orientation.z = quaternion_v2[2]
                 pose_plan.orientation.w = quaternion_v2[3]
 
-
+                #Perception of the future point
                 future_point_pose = np.array([pose_plan.position.x, pose_plan.position.y, pose_plan.position.z])
                 theta = np.radians(alpha)
                 future_point_rotation = np.array([[np.cos(theta), -np.sin(theta), 0], [np.sin(theta), np.cos(theta), 0], [0, 0, 1]])
                 future_position = np.dot(future_point_rotation, future_point_pose) #Expected point from planning
                 d_end_eff_fut_perception = np.linalg.norm(future_position - object_pose_array)
                 d_end_eff_per_norm = normalize(d_end_eff_fut_perception)
-                if d_end_eff_per_norm < 0.025: #For grasping will be 0.02<d<0.045
+                if d_end_eff_per_norm < 0.025:
                     # Checking the correct position
                     obj_grip_per = 1
 
@@ -220,15 +223,15 @@ def main():
 
             #Creating goals
             point_goal_list = []
-            goal = np.array([0.0, 0, 0]) #distance, obj_in_gripper and interest
+            goal = np.array([0.0, 0, 0]) #First goal distance, obj_in_gripper and interest
             while len(point_goal_list) < 30:
                 obj_grip_per_goal = random.choice([0, 1])
                 d_per_goal = random.uniform(0, 1)
                 random_goal = np.array([d_per_goal, obj_grip_per_goal])
                 #print("Random goal: ",+random_goal)
-                near_neigh = inverse(point_move_list, random_goal)
-                interest = update_interest_model(goal, near_neigh, t)
-                goal = np.array([near_neigh[3],near_neigh[4], interest])
+                near_neigh = inverse(point_move_list, random_goal) #Nearest neighbour
+                interest = update_interest_model(goal, near_neigh, t) #Criteria of interest
+                goal = np.array([near_neigh[3],near_neigh[4], interest]) #New goal for the next loop count
                 point_goal_list.append((near_neigh[0], near_neigh[1], near_neigh[2], near_neigh[3], near_neigh[4], interest))  
 
             # Sorting the list
@@ -244,7 +247,7 @@ def main():
                 goal_pole_obj.append(obj_grip_sel)
                 goal_pole_inter.append(max_interest_value)
 
-            for pole in vybrane_pole:
+            for pole in vybrane_pole: #Trying to reach the point with highest interest
                 [x, y, z, dis_sel, obj_grip_sel, max_interest_value]=pole
 
                 #Pose move
@@ -275,7 +278,7 @@ def main():
                     print("Executing with curios interest value: ",+max_interest_value)
                     arm_group.go(pose_go, wait=True)
 
-                    #Add point
+                    #Add point where robot moved
                     move_pose = arm_group.get_current_pose("ee_link").pose.position
                     move_point_pose = np.array([move_pose.x, move_pose.y, move_pose.z])
 
@@ -298,6 +301,7 @@ def main():
                     arm_group.clear_pose_targets()
                     break
 
+        #Plotting the graph
         alphas = np.linspace(1.0, 0.0, num=10)
         plt.figure(figsize=(14, 8))
         for loop_count_val, d_val, obj_val in zip(loop_count, d_obj, obj):
