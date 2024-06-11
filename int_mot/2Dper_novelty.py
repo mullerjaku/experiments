@@ -29,24 +29,25 @@ from plyer import notification
 AREA_MAX_DISTANCE = 1.2
 
 def normalize(d):
+    # Normalizes the distance based on the maximum reachable distance of the robot
     d_norm = d / AREA_MAX_DISTANCE #max=(2 x 0.85 max reach of robot) min max norm
     return d_norm
 
-def parse_string_list(string_list):
+def parse_string_list(string_list): #Function for parsing the string list if we use UM
     values_list = json.loads(string_list)
     return [float(value) for value in values_list]
 
 def novelty(d, obj_gripper, points_poses_list):
     point = np.array([d, obj_gripper])
     novelty_list = [] #List and loop for collect the distances
-    for one_point in points_poses_list:
+    for one_point in points_poses_list: #Loop for calculating the distance between the expected point and the points from the past
         d_novelty_points = np.linalg.norm(one_point - point) #Calculate distance with every point in the points_list_poses
         d_index = d_novelty_points #**2
         novelty_list.append(d_index) #List of distances between expected point and whole the points from past
 
     return ((sum(novelty_list)) / (len(points_poses_list)))
 
-def neural_network(result):
+def neural_network(result): #Utility model for prediction
     for i, sublist in enumerate(result):
         if len(sublist) > 11:
             result[i] = sublist[-11:]
@@ -136,7 +137,7 @@ def main():
     b = 1.3
     while not rospy.is_shutdown():
         pose_start = geometry_msgs.msg.Pose()
-        #Pose start
+        #Pose start of robot
         pose_start.position.x = c
         pose_start.position.y = v     
         pose_start.position.z = b
@@ -172,6 +173,7 @@ def main():
         points_list_poses = np.append(points_list_poses, [start_point], axis=0)
 
         norm_d = start_dis_norm
+        #Start time
         start_time = rospy.Time.now().to_sec()
         #Main body of progam
         while obj_grip != 1:
@@ -194,7 +196,7 @@ def main():
                 pose_plan.position.x += vel_x
                 pose_plan.position.y += vel_y
                 while True:
-                    vel_z = random.uniform(-0.5, 0.5)  # Náhodný pohyb
+                    vel_z = random.uniform(-0.5, 0.5)  # Radnom move in z between -0.5 and 0.5
                     position_z = pose_plan.position.z + vel_z
 
                     if (1.0 < position_z < 1.4):
@@ -206,7 +208,8 @@ def main():
                 pose_plan.orientation.y = quaternion_v2[1]
                 pose_plan.orientation.z = quaternion_v2[2]
                 pose_plan.orientation.w = quaternion_v2[3]
-
+                
+                #Perception of the future point
                 future_point_pose = np.array([pose_plan.position.x, pose_plan.position.y, pose_plan.position.z])
                 theta = np.radians(alpha)
                 future_point_rotation = np.array([[np.cos(theta), -np.sin(theta), 0], [np.sin(theta), np.cos(theta), 0], [0, 0, 1]])
@@ -214,14 +217,14 @@ def main():
                 #print("Expected future position: ",+future_position)
                 d_end_eff_fut_perception = np.linalg.norm(future_position - object_pose_array)
                 d_end_eff_per_norm = normalize(d_end_eff_fut_perception)
-                if d_end_eff_per_norm < 0.025: #For grasping will be 0.02<d<0.045
+                if d_end_eff_per_norm < 0.025: 
                     # Checking the correct position
                     obj_grip_per = 1
                 
-                if d_end_eff_per_norm >= 1:
+                if d_end_eff_per_norm >= 1: #Codnition for the distance and to evaluate that the robot doesnt want to go more far
                     prediction = 0
                 else: 
-                    prediction = novelty(d_end_eff_per_norm, obj_grip_per, points_list_poses)
+                    prediction = novelty(d_end_eff_per_norm, obj_grip_per, points_list_poses) #Novelty value of the expected point
 
                 #print(prediction)
                 vel = [vel_x, vel_y, vel_z]
@@ -241,7 +244,7 @@ def main():
             serazene_pole = sorted(point_move_list, key=lambda x: x[-1], reverse=True)
             vybrane_pole = serazene_pole[:10] #10 highest values
 
-            for pole in vybrane_pole:
+            for pole in vybrane_pole: #Try to move the robot to the expected point wit the highest novelty value
                 [vel_sel_x, vel_sel_y, vel_sel_z, alpha_sel, final_d_action_sel]=pole
 
                 #Pose move
@@ -267,7 +270,7 @@ def main():
                 else: #Action if the plan was found
                     arm_group.go(pose_go, wait=True)
 
-                    #Add point
+                    #Add point real point where robot moved
                     move_pose = arm_group.get_current_pose("ee_link").pose.position
                     move_point_pose = np.array([move_pose.x, move_pose.y, move_pose.z])
 
@@ -278,6 +281,7 @@ def main():
                         # Checking the correct position
                         obj_grip = 1
 
+                    #Add the point in the list and delete the first point if the list is longer than 40
                     percep_point = np.array([norm_d,obj_grip])
                     points_list_poses = np.append(points_list_poses, [percep_point], axis=0) #Add the expected point in the list, not just points of this looop
                     if points_list_poses.shape[0] > 40:
@@ -296,6 +300,7 @@ def main():
         loop_duration = end_time - start_time
         loop_times.append(loop_duration)
         
+        #Plotting the graph
         plt.figure(figsize=(14, 8))
         for loop_count_val, d_val, obj_val in zip(loop_count, d_obj, obj):
             if obj_val == 0:
@@ -315,7 +320,7 @@ def main():
         plt.ylabel('S(distance)')
         plt.savefig(f'2D_graf_novelty_{p}.png')
         plt.close()
-        
+
         p+=1
         if p == 10:
             print(loop_times)
